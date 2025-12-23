@@ -4,11 +4,15 @@ import {
   ProFormText,
 } from "@ant-design/pro-components";
 import { UserOutlined, LockOutlined } from "@ant-design/icons";
-import { Button } from "antd";
+import { Button, message, Tabs } from "antd";
 import { useState } from "react";
-import { APILogin } from "../ApiService";
-export const LoginFormComponent = () => {
+import { APICreateUser, APILogin } from "../ApiService";
+import { useNavigate } from "react-router-dom";
+export const LoginFormPage = () => {
   const [isLoading, setLoading] = useState(false);
+  const [activeKey, setActiveKey] = useState("login");
+  const [messageApi, contextHolder] = message.useMessage();
+  const navigate = useNavigate();
 
   const submitForm = async (form) => {
     form.validateFields();
@@ -17,18 +21,55 @@ export const LoginFormComponent = () => {
     if (!userName || !password) return;
     setLoading(true);
     const shaPassword = await sha256(password);
-    APILogin(userName, shaPassword)
-      .then((response) => {
-        if (!response.ok) throw new Error("Network response was not ok");
-        return response.json();
-      })
-      .then((data) => console.log(data))
-      .catch((error) => console.log(error))
-      .finally(setLoading(false));
+    if (activeKey === "login") {
+      APILogin(userName, shaPassword)
+        .then((response) => {
+          console.log(response);
+          if (!response.ok) {
+            if (response.status === 404 || response.status === 401) {
+              messageApi.error("User or password incorrect");
+            } else {
+              messageApi.error("An internal error occured");
+            }
+            throw new Error("Could not login");
+          }
+          return response.json();
+        })
+        .then((data) => {
+          setLoading(false);
+          navigate("/todos", { state: data.id, replace: true });
+        })
+        .catch(() => {
+          setLoading(false);
+        });
+    } else {
+      APICreateUser(userName, shaPassword)
+        .then((response) => {
+          if (!response.ok) {
+            if (response.status === 409) {
+              messageApi.error("User already exists");
+            } else {
+              messageApi.error("An internal error occured");
+            }
+            throw new Error("Network response was not ok");
+          }
+          return response.json();
+        })
+        .then((data) => {
+          setLoading(false);
+          console.log(data);
+          console.log(data.id);
+          navigate("/todos", { state: data.id, replace: true });
+        })
+        .catch(() => {
+          setLoading(false);
+        });
+    }
   };
 
   return (
     <PageContainer title="TODO website">
+      {contextHolder}
       <ProForm
         layout="horizontal"
         variant="outlined"
@@ -43,12 +84,22 @@ export const LoginFormComponent = () => {
                   submitForm(form);
                 }}
               >
-                Log In
+                {activeKey === "login" ? "Log in" : "Sign up"}
               </Button>
             );
           },
         }}
       >
+        <Tabs
+          centered
+          activeKey={activeKey}
+          items={[
+            { key: "login", label: "Log in" },
+            { key: "signup", label: "Sign up" },
+          ]}
+          onChange={(key) => setActiveKey(key)}
+        />
+
         <div style={{ marginTop: "32px" }}>
           <ProFormText
             name="username"
